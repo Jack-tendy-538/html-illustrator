@@ -7,7 +7,7 @@ For a beginner for python, functions like `input` and `print` are very commonly 
 
 This library, served as therapy, will provide them a platform on which all the inputs/outputs will be put on the browser.
 
-| in other says, you may keep your habit of using `print` to output things in a Web GUI way.
+> in other says, you may keep your habit of using `print` to output things in a Web GUI way.
 
 requirements:
 ``` txt
@@ -16,7 +16,7 @@ gunicorn
 ```
 
 ## time table
-__Arrangements always go before movements. -a Chinese saying __
+> Arrangements always go before movements. -a Chinese saying
 the project involves files like following:
 
 | filename | description|
