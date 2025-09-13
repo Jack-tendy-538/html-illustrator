@@ -32,7 +32,9 @@ function onInput() {
     return false;
 }
 function terminate() {
-    fetch('/api?terminate=true')
+    fetch('/api?terminate=true', {
+        method: 'POST'
+    })
         .then(res => res.json())
         .then(data => {
             console.log('Terminated:', data);

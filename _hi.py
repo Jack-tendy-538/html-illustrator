@@ -1,5 +1,6 @@
+from sre_parse import SPECIAL_CHARS
 from bottle import Bottle, request, response, HTTPError, HTTPResponse, static_file
-import json, re
+import json, re, webbrowser
 import threading, queue, uuid
 
 class ConsoleOperation:
@@ -21,7 +22,24 @@ class ConsoleOperation:
             charset='utf-8'
         )
 
-class ConsoleApp:
+class inputWaiter:
+    def __init__(self):
+        self.event = threading.Event()
+        self.value = None
+
+    def wait(self):
+        self.event.wait()
+        return self.value
+
+SPECIAL_CHARS = {
+    '>':'&gt;',
+    '<':'&lt;',
+    '&':'&amp;',
+    '"':'&quot;',
+    "'":'&#39;'
+}
+
+class HtmlIllustrator:
     def __init__(self):
         self.app = Bottle()
         self.__annotations__ = {}
@@ -40,34 +58,47 @@ class ConsoleApp:
         def server_static(filepath):
             return static_file(filepath, root='./static')
 
-        @self.app.route('/api', method=['GET', 'POST'])
-        def api():
-            co = request.query.get('co', '0')
-            action = request.query.get('action', 'terminal')
-            input_value = request.query.get('input', None)
-            # 这里可以根据 action 和 input_value 处理不同的终端操作
-            # 示例：简单模拟终端输出和输入
-            if input_value is not None:
-                # 用户提交了输入，返回 print 操作
-                return ConsoleOperation(
-                    name="print",
-                    origin="server",
-                    args={"content": f"你输入了: {input_value}", "co": int(co) + 1, "newline": "<br />"}
-                ).to_response()
+        @self.app.route('/api?co=<co>&action=terminal', method='GET')
+        def api_terminal(co):
+            try:
+                op = self.op_queue.get(timeout=30)
+                return op.to_response()
+            except queue.Empty:
+                raise HTTPError(204, "No Content")
+
+        @self.app.route('/api?co=<co>&action=input', method='POST')
+        def api_input(co):
+            data = request.json
+            if not data or 'content' not in data:
+                raise HTTPError(400, "Bad Request")
+            content = data['content']
+            if 'input_waiter' in self.__annotations__:
+                iw = self.__annotations__.pop('input_waiter')
+                iw.value = content
+                iw.event.set()
+                return HTTPResponse(status=200, body="OK")
             else:
-                # 轮询时，交替返回 print 和 input
-                if int(co) % 2 == 0:
-                    return ConsoleOperation(
-                        name="print",
-                        origin="server",
-                        args={"content": "欢迎使用终端，请输入内容：", "co": int(co) + 1, "newline": "<br />"}
-                    ).to_response()
-                else:
-                    return ConsoleOperation(
-                        name="input",
-                        origin="server",
-                        args={"content": "请输入内容：", "co": int(co) + 1}
-                    ).to_response()
+                raise HTTPError(400, "No input waiter")
+
+        @self.app.route('/api?co=<co>&action=clear', method='POST')
+        def api_clear(co):
+            with self.lock:
+                while not self.op_queue.empty():
+                    self.op_queue.get()
+                return HTTPResponse(status=200, body="OK")
+
+        @self.app.route('/api?terminal=true', method='POST')
+        def terminate_program():
+            raise KeyboardInterrupt()
+
+    def enable(self, lib_type, url):
+        if lib_type in self.enabled_lib:
+            self.enabled_lib[lib_type].append(url)
+
+    def run(self, host='localhost', port=8080):
+        self.server = threading.Thread(target=self.app.run,kwargs={'host':host, 'port':port, 'debug':True})
+        self.server.start()
+        webbrowser.open(f'http://{host}:{port}')
 
     def __gen_links(self):
         links = []
@@ -77,9 +108,32 @@ class ConsoleApp:
             links.append(f'<script src="{js}"></script>')
         return '\n'.join(links)
 
+    def print(self, content, co=0, newline='\n'):
+        # 转义特殊字符
+        content = ''.join(SPECIAL_CHARS.get(c, c) for c in content)
+        with self.lock:
+            op = ConsoleOperation('print', 'server', {
+                'content': content,
+                'co': co,
+                'newline': newline
+            })
+            self.op_queue.put(op)
+
+    def input(self, prompt=''):
+        # 转义特殊字符
+        prompt = ''.join(SPECIAL_CHARS.get(c, c) for c in prompt)
+        # 轮询等待输入
+        iw = inputWaiter()
+        with self.lock:
+            self.__annotations__['input_waiter'] = iw
+            op = ConsoleOperation('input', 'server', {
+                'content': prompt,
+                'co': 0,
+                'newline': ''
+            })
+            self.op_queue.put(op)
+            return iw.wait()
+
 if __name__ == '__main__':
     app = ConsoleApp()
     app.enabled_lib['js'].append('static/std-stdio.js')
-    # 如有CSS可添加
-    # app.enabled_lib['css'].append('static/your-style.css')
-    app.app.run(host='0.0.0.0', port=8080, debug=True)
