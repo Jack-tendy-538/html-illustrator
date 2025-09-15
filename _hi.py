@@ -46,6 +46,7 @@ class HtmlIllustrator:
         self.op_queue = queue.Queue()
         self.lock = threading.Lock()
         self.enabled_lib = {'css': [], 'js': []}
+        self.enable('js', 'std-stdio.js')
 
         @self.app.route('/', method='GET')
         def index():
@@ -54,9 +55,9 @@ class HtmlIllustrator:
                 html = f.read()
                 return regex.sub(self.__gen_links(), html)
 
-        @self.app.route('/static/<filepath:path>')
+        @self.app.route('/static/<filepath>')
         def server_static(filepath):
-            return static_file(filepath, root='./static')
+            return static_file(filepath, root='./static/')
 
         @self.app.route('/api?co=<co>&action=terminal', method='GET')
         def api_terminal(co):
@@ -103,9 +104,9 @@ class HtmlIllustrator:
     def __gen_links(self):
         links = []
         for css in self.enabled_lib['css']:
-            links.append(f'<link rel="stylesheet" type="text/css" href="{css}">')
+            links.append(f'<link rel="stylesheet" type="text/css" href="static/{css}">')
         for js in self.enabled_lib['js']:
-            links.append(f'<script src="{js}"></script>')
+            links.append(f'<script src="static/{js}"></script>')
         return '\n'.join(links)
 
     def print(self, content, co=0, newline='\n'):
@@ -135,5 +136,12 @@ class HtmlIllustrator:
             return iw.wait()
 
 if __name__ == '__main__':
-    app = ConsoleApp()
-    app.enabled_lib['js'].append('static/std-stdio.js')
+    app = HtmlIllustrator()
+    app.enabled_lib['js'].append('std-stdio.js')
+    app.run()
+    try:
+        app.print("Hello, World!")
+        name = app.input("Enter your name: ")
+        app.print(f"Hello, {name}!")
+    except KeyboardInterrupt:
+        print("Program terminated.")
