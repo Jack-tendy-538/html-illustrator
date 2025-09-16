@@ -59,38 +59,41 @@ class HtmlIllustrator:
         def server_static(filepath):
             return static_file(filepath, root='./static/')
 
-        @self.app.route('/api?co=<co>&action=terminal', method='GET')
-        def api_terminal(co):
-            try:
-                op = self.op_queue.get(timeout=30)
-                return op.to_response()
-            except queue.Empty:
-                raise HTTPError(204, "No Content")
-
-        @self.app.route('/api?co=<co>&action=input', method='POST')
-        def api_input(co):
-            data = request.json
-            if not data or 'content' not in data:
-                raise HTTPError(400, "Bad Request")
-            content = data['content']
-            if 'input_waiter' in self.__annotations__:
-                iw = self.__annotations__.pop('input_waiter')
-                iw.value = content
-                iw.event.set()
-                return HTTPResponse(status=200, body="OK")
-            else:
-                raise HTTPError(400, "No input waiter")
-
-        @self.app.route('/api?co=<co>&action=clear', method='POST')
-        def api_clear(co):
-            with self.lock:
-                while not self.op_queue.empty():
-                    self.op_queue.get()
-                return HTTPResponse(status=200, body="OK")
-
-        @self.app.route('/api?terminal=true', method='POST')
-        def terminate_program():
-            raise KeyboardInterrupt()
+        @self.app.route('/api', method=['GET', 'POST'])
+        def api():
+            co = request.query.get('co')
+            action = request.query.get('action')
+            # 终止程序
+            if request.query.get('terminal') == 'true':
+                raise KeyboardInterrupt()
+            # 清空队列
+            if action == 'clear' and request.method == 'POST':
+                with self.lock:
+                    while not self.op_queue.empty():
+                        self.op_queue.get()
+                    return HTTPResponse(status=200, body="OK")
+            # 终端操作
+            if action == 'terminal' and request.method == 'GET':
+                try:
+                    op = self.op_queue.get(timeout=30)
+                    return op.to_response()
+                except queue.Empty:
+                    raise HTTPError(204, "No Content")
+            # 输入处理
+            if action == 'input' and request.method == 'POST':
+                data = request.json
+                if not data or 'content' not in data:
+                    raise HTTPError(400, "Bad Request")
+                content = data['content']
+                if 'input_waiter' in self.__annotations__:
+                    iw = self.__annotations__.pop('input_waiter')
+                    iw.value = content
+                    iw.event.set()
+                    return HTTPResponse(status=200, body="OK")
+                else:
+                    raise HTTPError(400, "No input waiter")
+            # 未知请求
+            return HTTPResponse(status=400, body="Invalid request")
 
     def enable(self, lib_type, url):
         if lib_type in self.enabled_lib:

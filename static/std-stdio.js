@@ -6,15 +6,15 @@ function printf(content, co, newline = '\n') {
     return `<p co=${co}>${content}${newline}</p>`;
 }
 function scanf(content, co) {
-    return ```
-        < form co=${co}>
-            <p>${ content }</p>
+    return `
+        <form co=${co}>
+            <p>${content}</p>
             <div class="input">
                 <input type="text" name="input" autofocus />
                 <button type="submit" accesskey='Enter'>Enter</button>
             </div>
-        </form >
-    ```
+        </form>
+    `;
 }
 let map = new Map()
 map.set('print', printf)
