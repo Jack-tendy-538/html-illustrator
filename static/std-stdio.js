@@ -20,15 +20,20 @@ let map = new Map()
 map.set('print', printf)
 map.set('input', scanf)
 function onInput() {
-    // TODO: handle input
-    // get the input value
     let input = this.querySelector('input[name="input"]').value;
-    // remove the form
-    this.parentNode.removeChild(this);
-    // get the co
+    // Ö»É¾³ýEnter°´Å¥
+    let button = this.querySelector('button[type="submit"]');
+    if (button) {
+        button.parentNode.removeChild(button);
+    }
     let co = this.getAttribute('co');
-    // send the input to the server /api?co=...input=...
-    fetch(`/api?co=${co}&input=${encodeURIComponent(input)}`);
+    fetch(`/api?co=${co}&action=input`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ content: input })
+    });
     return false;
 }
 function terminate() {

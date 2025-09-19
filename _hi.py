@@ -144,6 +144,7 @@ if __name__ == '__main__':
     app.run()
     try:
         app.print("Hello, World!")
+        app.print("This is a test of the HtmlIllustrator console.")
         name = app.input("Enter your name: ")
         app.print(f"Hello, {name}!")
     except KeyboardInterrupt:
