@@ -1,7 +1,7 @@
-from sre_parse import SPECIAL_CHARS
+#from sre_parse import SPECIAL_CHARS
 from bottle import Bottle, request, response, HTTPError, HTTPResponse, static_file
 import json, re, webbrowser
-import threading, queue, uuid
+import threading, queue, uuid, os
 
 class ConsoleOperation:
     def __init__(self, name, origin, args):
@@ -47,7 +47,8 @@ class HtmlIllustrator:
         self.lock = threading.Lock()
         self.enabled_lib = {'css': [], 'js': []}
         self.enable('js', 'std-stdio.js')
-
+        self.enable('css', 'std-stdio.css')
+        self.curr_co = 0
         @self.app.route('/', method='GET')
         def index():
             regex = re.compile(r'<!--\s*css\s*-->', re.IGNORECASE)
@@ -63,23 +64,23 @@ class HtmlIllustrator:
         def api():
             co = request.query.get('co')
             action = request.query.get('action')
-            # 终止程序
+            # 缁堟绋嬪簭
             if request.query.get('terminal') == 'true':
-                raise KeyboardInterrupt()
-            # 清空队列
+                raise KeyboardInterrupt('')
+            # 娓呯┖闃熷垪
             if action == 'clear' and request.method == 'POST':
                 with self.lock:
                     while not self.op_queue.empty():
                         self.op_queue.get()
                     return HTTPResponse(status=200, body="OK")
-            # 终端操作
+            # 缁堢鎿嶄綔
             if action == 'terminal' and request.method == 'GET':
                 try:
                     op = self.op_queue.get(timeout=30)
                     return op.to_response()
                 except queue.Empty:
                     raise HTTPError(204, "No Content")
-            # 输入处理
+            # 杈撳叆澶勭悊
             if action == 'input' and request.method == 'POST':
                 data = request.json
                 if not data or 'content' not in data:
@@ -92,7 +93,9 @@ class HtmlIllustrator:
                     return HTTPResponse(status=200, body="OK")
                 else:
                     raise HTTPError(400, "No input waiter")
-            # 未知请求
+            if request.query.get('terminate') == 'true' and request.method == 'POST':
+                raise KeyboardInterrupt('')
+            # 鏈煡璇锋眰
             return HTTPResponse(status=400, body="Invalid request")
 
     def enable(self, lib_type, url):
@@ -112,31 +115,33 @@ class HtmlIllustrator:
             links.append(f'<script src="static/{js}"></script>')
         return '\n'.join(links)
 
-    def print(self, content, co=0, newline='\n'):
-        # 转义特殊字符
+    def print(self, content, newline='\n'):
+        self.curr_co += 1
+        # 杞箟鐗规畩瀛楃
         content = ''.join(SPECIAL_CHARS.get(c, c) for c in content)
         with self.lock:
             op = ConsoleOperation('print', 'server', {
                 'content': content,
-                'co': co,
+                'co': self.curr_co,
                 'newline': newline
             })
             self.op_queue.put(op)
 
     def input(self, prompt=''):
-        # 转义特殊字符
+        self.curr_co += 1
+        # 杞箟鐗规畩瀛楃
         prompt = ''.join(SPECIAL_CHARS.get(c, c) for c in prompt)
-        # 轮询等待输入
+        # 杞绛夊緟杈撳叆
         iw = inputWaiter()
         with self.lock:
             self.__annotations__['input_waiter'] = iw
             op = ConsoleOperation('input', 'server', {
                 'content': prompt,
-                'co': 0,
+                'co': self.curr_co,
                 'newline': ''
             })
             self.op_queue.put(op)
-            return iw.wait()
+        return iw.wait()
 
 if __name__ == '__main__':
     app = HtmlIllustrator()
@@ -146,6 +151,7 @@ if __name__ == '__main__':
         app.print("Hello, World!")
         app.print("This is a test of the HtmlIllustrator console.")
         name = app.input("Enter your name: ")
+        app.print("Processing your input...")
         app.print(f"Hello, {name}!")
     except KeyboardInterrupt:
         print("Program terminated.")

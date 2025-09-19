@@ -4,9 +4,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Terminal</title>
     <!--css-->
-    <script type="text/javascript">
-        run();
-    </script>
 </head>
 <body>
     <div id="terminate" dir="rtl">
@@ -15,5 +12,25 @@
     <div id="product" class="product">
         <!--console operations here-->
     </div>
+
+    <!-- 将脚本调用移到 body 底部，确保 DOM 已加载 -->
+    <script>
+        // 等待页面完全加载后再执行
+        document.addEventListener('DOMContentLoaded', function () {
+            // 确保所有脚本已加载
+            if (typeof run === 'function') {
+                run();
+            } else {
+                // 如果 run 函数尚未定义，等待一段时间再尝试
+                setTimeout(function () {
+                    if (typeof run === 'function') {
+                        run();
+                    } else {
+                        console.error('run function not found');
+                    }
+                }, 100);
+            }
+        });
+    </script>
 </body>
 </html>
