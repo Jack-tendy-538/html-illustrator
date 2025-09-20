@@ -9,7 +9,7 @@ function printf(content, co, newline = '\n') {
 
 function scanf(content, co) {
     return `
-        <form co="${co}" action='onInput()'>
+        <form co="${co}">
             <p>${content}</p>
             <div class="input">
                 <input type="text" name="input" autofocus />
@@ -24,47 +24,42 @@ map.set('print', printf);
 map.set('input', scanf);
 
 function onInput(form) {
-    let inputElem = form.querySelector('input[name="input"]');
-    let input = inputElem.value.trim();
-    let co = form.getAttribute('co');
-    let button = form.querySelector('button[type="submit"]');
+    let $form = $(form);
+    let $input = $form.find('input[name="input"]');
+    let input = $input.val().trim();
+    let co = $form.attr('co');
+    let $button = $form.find('button[type="submit"]');
 
-    // 输入为空不提交
+    // 检查输入是否为空
     if (!input) {
-        inputElem.focus();
-        inputElem.style.background = "#ffecec";
+        $input.focus();
+        $input.css('background', '#ffecec');
         return false;
     }
 
     // 禁用按钮防止重复提交
-    button.disabled = true;
+    $button.prop('disabled', true);
 
-    fetch(`/api?co=${co}&action=input`, {
+    $.ajax({
+        url: `/api?co=${co}&action=input`,
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ content: input })
+        contentType: 'application/json',
+        data: JSON.stringify({ content: input })
     })
-        .then(response => {
-            if (response.ok) {
-                // 显示用户输入内容
-                let productDiv = document.getElementById('product');
-                if (productDiv) {
-                    productDiv.insertAdjacentHTML('beforeend', `<p co="${co}" style="color:#888;">${input}</p>`);
-                }
-                // 移除表单
-                form.parentNode.removeChild(form);
-                setTimeout(loop, TICK * 1000);
-            } else {
-                button.disabled = false;
-                inputElem.style.background = "#ffecec";
+        .done(function () {
+            // 显示用户输入的内容
+            let $productDiv = $('#product');
+            if ($productDiv.length) {
+                $productDiv.append(`<p co="${co}" style="color:#888;">${input}</p>`);
             }
+            // 移除表单
+            $form.remove();
+            setTimeout(loop, TICK * 1000);
         })
-        .catch(err => {
-            button.disabled = false;
-            inputElem.style.background = "#ffecec";
-            alert('网络错误，请重试');
+        .fail(function (err) {
+            $button.prop('disabled', false);
+            $input.css('background', '#ffecec');
+            alert('提交失败，请重试');
             console.error('Input error:', err);
         });
 
@@ -72,31 +67,24 @@ function onInput(form) {
 }
 
 function terminate() {
-    fetch('/api?terminate=true', {
+    $.ajax({
+        url: '/api?terminate=true',
         method: 'POST'
     })
-        .then(res => {
+        .done(function () {
             console.log('Terminated');
         })
-        .catch(err => {
+        .fail(function (err) {
             console.error('Terminate error:', err);
         });
 }
 
 let co = 0;
 function loop() {
-    fetch(`/api?co=${co}&action=terminal`)
-        .then(res => {
-            if (res.status === 204) {
-                // 没有内容，继续轮询
-                setTimeout(loop, TICK * 1000);
-                return null;
-            }
-            return res.json();
-        })
-        .then(data => {
-            if (!data) return;
-
+    $.ajax({
+        url: `/api?co=${co}&action=terminal`
+    })
+        .done(function (data) {
             if (data.type === 'end') {
                 // 程序结束
                 return;
@@ -104,36 +92,36 @@ function loop() {
 
             if (data.type === 'print') {
                 let html = map.get('print')(data.content, co, data.newline);
-                let productDiv = document.getElementById('product');
-                if (productDiv) {
-                    productDiv.insertAdjacentHTML('beforeend', html);
+                let $productDiv = $('#product');
+                if ($productDiv.length) {
+                    $productDiv.append(html);
                 }
                 co = data.co;
                 setTimeout(loop, TICK * 1000);
             } else if (data.type === 'input') {
                 let html = map.get('input')(data.content, co);
-                let productDiv = document.getElementById('product');
-                if (productDiv) {
-                    productDiv.insertAdjacentHTML('beforeend', html);
+                let $productDiv = $('#product');
+                if ($productDiv.length) {
+                    $productDiv.append(html);
 
                     // 添加表单提交事件
-                    let form = productDiv.querySelector(`form[co="${co}"]`);
-                    if (form) {
-                        form.onsubmit = function (e) {
+                    let $form = $(`form[co="${co}"]`);
+                    if ($form.length) {
+                        $form.on('submit', function (e) {
                             e.preventDefault();
-                            onInput(form);
+                            onInput(this);
                             return false;
-                        };
+                        });
 
                         // 聚焦输入框
-                        form.querySelector('input[name="input"]').focus();
+                        $form.find('input[name="input"]').focus();
                     }
                 }
                 co = data.co;
                 // 这里不调用 loop，等待用户输入
             }
         })
-        .catch(err => {
+        .fail(function (err) {
             console.error('Fetch error:', err);
             setTimeout(loop, TICK * 1000);
         });
@@ -147,6 +135,6 @@ window.run = function () {
 window.terminate = terminate;
 
 // 页面加载完成后自动启动
-document.addEventListener('DOMContentLoaded', function () {
+$(document).ready(function () {
     setTimeout(run, 100);
 });

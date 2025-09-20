@@ -68,8 +68,9 @@ class HtmlIllustrator:
             return self.deal_with_api(co,action,method)
 
     def deal_with_api(self, co, action, method):
-        if request.query.get('terminal') == 'true':
-            raise KeyboardInterrupt('')
+        if request.query.get('terminal') == 'close':
+#            raise KeyboardInterrupt('')
+             os._exit(0)
         # 清空队列
         if action == 'clear' and method == 'POST':
             with self.lock:
@@ -97,7 +98,8 @@ class HtmlIllustrator:
             else:
                 raise HTTPError(400, "No input waiter")
         if request.query.get('terminate') == 'true' and request.method == 'POST':
-            raise KeyboardInterrupt('')
+#            raise KeyboardInterrupt('')
+            os._exit(0)
             # 未知请求
         return HTTPResponse(status=400, body="Invalid request")
 
@@ -107,8 +109,13 @@ class HtmlIllustrator:
 
     def run(self, host='localhost', port=8080):
         self.server = threading.Thread(target=self.app.run,kwargs={'host':host, 'port':port, 'debug':True})
+        self.server.daemon = True
         self.server.start()
         webbrowser.open(f'http://{host}:{port}')
+
+    def kill(self):
+#        self.server.daemon = False
+        del self.server
 
     def __gen_links(self):
         links = []
