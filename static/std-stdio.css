@@ -1,0 +1,54 @@
+.product {
+    width: 80vw;
+    min-height: 300px;
+    margin: 40px auto;
+    background: #f8f8fc;
+    border-radius: 32px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 32px;
+    box-sizing: border-box;
+}
+
+.input {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 8px 16px;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: box-shadow 0.3s, background 0.3s;
+    animation: inputFadeIn 0.5s ease;
+}
+
+    .input:focus-within {
+        box-shadow: 0 4px 16px rgba(0,0,128,0.15);
+        background: #eef6ff;
+    }
+
+@keyframes inputFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.input input[type="text"] {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 1.1em;
+    padding: 6px 10px;
+    border-radius: 8px;
+    flex: 1;
+    transition: background 0.2s;
+}
+
+    .input input[type="text"]:focus {
+        background: #e3eaff;
+    }

@@ -9,7 +9,7 @@ function printf(content, co, newline = '\n') {
 
 function scanf(content, co) {
     return `
-        <form co="${co}">
+        <form co="${co}" action='onInput()'>
             <p>${content}</p>
             <div class="input">
                 <input type="text" name="input" autofocus />
@@ -24,10 +24,21 @@ map.set('print', printf);
 map.set('input', scanf);
 
 function onInput(form) {
-    let input = form.querySelector('input[name="input"]').value;
+    let inputElem = form.querySelector('input[name="input"]');
+    let input = inputElem.value.trim();
     let co = form.getAttribute('co');
+    let button = form.querySelector('button[type="submit"]');
 
-    // 发送 POST 请求到服务器
+    // 输入为空不提交
+    if (!input) {
+        inputElem.focus();
+        inputElem.style.background = "#ffecec";
+        return false;
+    }
+
+    // 禁用按钮防止重复提交
+    button.disabled = true;
+
     fetch(`/api?co=${co}&action=input`, {
         method: 'POST',
         headers: {
@@ -37,13 +48,23 @@ function onInput(form) {
     })
         .then(response => {
             if (response.ok) {
+                // 显示用户输入内容
+                let productDiv = document.getElementById('product');
+                if (productDiv) {
+                    productDiv.insertAdjacentHTML('beforeend', `<p co="${co}" style="color:#888;">${input}</p>`);
+                }
                 // 移除表单
                 form.parentNode.removeChild(form);
-                // 继续轮询获取下一个操作
                 setTimeout(loop, TICK * 1000);
+            } else {
+                button.disabled = false;
+                inputElem.style.background = "#ffecec";
             }
         })
         .catch(err => {
+            button.disabled = false;
+            inputElem.style.background = "#ffecec";
+            alert('网络错误，请重试');
             console.error('Input error:', err);
         });
 
