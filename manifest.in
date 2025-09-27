@@ -1,0 +1,5 @@
+# MANIFEST.in
+include README.md
+include LICENSE
+recursive-include htmlillustrator/templates *
+recursive-include htmlillustrator/static *

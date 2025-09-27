@@ -1,5 +1,5 @@
 #from sre_parse import SPECIAL_CHARS
-import json, re, webbrowser,time
+import json, re, webbrowser,time, pkg_resources
 import threading, queue, uuid, os
 
 from wsgiref.simple_server import make_server, WSGIRequestHandler
@@ -127,6 +127,16 @@ class HtmlIllustrator:
 
         @self.app.route('/static/<filepath>')
         def server_static(filepath):
+            # 首先尝试包内的静态文件
+            package_static_path = pkg_resources.resource_filename(__name__, f'static/{filepath}')
+            if os.path.exists(package_static_path):
+                return static_file(filepath, root=os.path.dirname(package_static_path))
+            
+            # 然后尝试外部静态目录
+            if self.static_dir and os.path.exists(os.path.join(self.static_dir, filepath)):
+                return static_file(filepath, root=self.static_dir)
+            
+            # 最后尝试当前工作目录
             return static_file(filepath, root='./static/')
 
         @self.app.route('/api', method=['GET', 'POST'])
@@ -196,6 +206,43 @@ class HtmlIllustrator:
         time.sleep(0.5)  # 给响应一点时间
         if self.bd:
             self.bd.stop()
+
+    def _get_static_dir():
+        """获取静态文件目录"""
+        # 首先尝试包内的静态目录
+        try:
+            static_dir = pkg_resources.resource_filename(__name__, 'static')
+            if os.path.exists(static_dir):
+                return static_dir
+        except:
+            pass
+        
+        # 然后尝试当前工作目录下的static目录
+        cwd_static = './static/'
+        if os.path.exists(cwd_static):
+            return cwd_static
+        
+        return None
+
+    def _get_interface_html(self):
+        """获取interface.html内容"""
+        # 首先尝试包内的模板
+        try:
+            interface_path = pkg_resources.resource_filename(__name__, 'templates/interface.html')
+            if os.path.exists(interface_path):
+                with open(interface_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+        except:
+            pass
+        # 然后尝试当前工作目录
+        try:
+            if os.path.exists('interface.html'):
+                with open('interface.html', 'r', encoding='utf-8') as f:
+                    return f.read()
+        except:
+            pass
+        
+        return None
 
     def __gen_links(self):
         links = []
