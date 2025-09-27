@@ -1,7 +1,10 @@
 #from sre_parse import SPECIAL_CHARS
-from bottle import Bottle, request, response, HTTPError, HTTPResponse, static_file
-import json, re, webbrowser
+import json, re, webbrowser,time
 import threading, queue, uuid, os
+
+from wsgiref.simple_server import make_server, WSGIRequestHandler
+from bottle import ServerAdapter
+from bottle import Bottle, request, response, HTTPError, HTTPResponse, static_file
 
 class ConsoleOperation:
     def __init__(self, name, origin, args):
@@ -39,6 +42,71 @@ SPECIAL_CHARS = {
     "'":'&#39;'
 }
 
+class BottleDaemonner:
+    def __init__(self, hi, host='localhost', port=8080):
+        self.hi = hi
+        self.host = host
+        self.port = port
+        self.server_thread = None
+        self.server = None  # 保存服务器实例引用
+        
+    def target(self):
+        """启动服务器的目标函数"""
+#        from bottle import ServerAdapter
+        
+        # 创建自定义服务器适配器，以便能够控制服务器
+        class StoppableWSGIRefServer(ServerAdapter):
+            def __init__(self, host='localhost', port=8080, **options):
+                super().__init__(host, port, **options)
+                self.srv = None
+                
+            def run(self, handler):
+#                from wsgiref.simple_server import make_server, WSGIRequestHandler
+                
+                class QuietHandler(WSGIRequestHandler):
+                    def log_request(self, *args, **kwargs):
+                        pass  # 禁用请求日志
+                
+                self.srv = make_server(self.host, self.port, handler, handler_class=QuietHandler)
+                self.srv.serve_forever()
+                
+            def shutdown(self):
+                if self.srv:
+                    self.srv.shutdown()
+        
+        # 使用可停止的服务器
+        self.server = StoppableWSGIRefServer(host=self.host, port=self.port)
+        self.hi.app.run(server=self.server)
+    
+    def start(self):
+        """启动服务器线程"""
+        self.server_thread = threading.Thread(target=self.target)
+        self.server_thread.daemon = True
+        self.server_thread.start()
+    
+    def stop(self):
+        """停止服务器"""
+        if self.server:
+            try:
+                # 发送关闭信号给服务器
+                import requests
+                try:
+                    requests.post(f'http://{self.host}:{self.port}/api?terminate=true', timeout=1)
+                except:
+                    pass  # 忽略连接错误，服务器可能已经关闭
+                
+                # 停止服务器
+                self.server.shutdown()
+            except Exception as e:
+                print(f"Error when closing server: {e}")
+        
+        if self.server_thread and self.server_thread.is_alive():
+            self.server_thread.join(timeout=5)  # 等待线程结束，最多5秒
+            
+        # 清理资源
+        self.server = None
+        self.server_thread = None
+
 class HtmlIllustrator:
     def __init__(self):
         self.app = Bottle()
@@ -49,6 +117,7 @@ class HtmlIllustrator:
         self.enable('js', 'std-stdio.js')
         self.enable('css', 'std-stdio.css')
         self.curr_co = 0
+        self.bd = None
         @self.app.route('/', method='GET')
         def index():
             regex = re.compile(r'<!--\s*css\s*-->', re.IGNORECASE)
@@ -69,8 +138,8 @@ class HtmlIllustrator:
 
     def deal_with_api(self, co, action, method):
         if request.query.get('terminal') == 'close':
-#            raise KeyboardInterrupt('')
-             os._exit(0)
+            threading.Thread(target=self._graceful_shutdown).start()
+            return HTTPResponse(status=200, body="Closing...")
         # 清空队列
         if action == 'clear' and method == 'POST':
             with self.lock:
@@ -98,9 +167,10 @@ class HtmlIllustrator:
             else:
                 raise HTTPError(400, "No input waiter")
         if request.query.get('terminate') == 'true' and request.method == 'POST':
-#            raise KeyboardInterrupt('')
-            os._exit(0)
-            # 未知请求
+            # 优雅关闭而不是强制退出
+            threading.Thread(target=self._graceful_shutdown).start()
+            return HTTPResponse(status=200, body="Shutting down...")
+        # 未知请求
         return HTTPResponse(status=400, body="Invalid request")
 
     def enable(self, lib_type, url):
@@ -108,14 +178,24 @@ class HtmlIllustrator:
             self.enabled_lib[lib_type].append(url)
 
     def run(self, host='localhost', port=8080):
-        self.server = threading.Thread(target=self.app.run,kwargs={'host':host, 'port':port, 'debug':True})
-        self.server.daemon = True
-        self.server.start()
+        """运行服务器"""
+        self.arg_server = (host, port)
+        self.bd = BottleDaemonner(self, host, port)
+        self.bd.start()  # 启动服务器线程
         webbrowser.open(f'http://{host}:{port}')
 
     def kill(self):
-#        self.server.daemon = False
-        del self.server
+        """停止服务器"""
+        if self.bd:
+            self.bd.stop()
+            self.bd = None
+
+    def _graceful_shutdown(self):
+        """优雅关闭服务器"""
+#        import time
+        time.sleep(0.5)  # 给响应一点时间
+        if self.bd:
+            self.bd.stop()
 
     def __gen_links(self):
         links = []
