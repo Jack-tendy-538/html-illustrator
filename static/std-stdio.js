@@ -1,5 +1,6 @@
 const TICK = 0.2;
 
+// 非阻塞操作：打印
 function printf(content, co, newline = '\n') {
     if (newline) {
         newline = newline.replace(/\n/g, '<br />');
@@ -7,6 +8,7 @@ function printf(content, co, newline = '\n') {
     return `<p co="${co}">${content}${newline}</p>`;
 }
 
+// 阻塞操作：输入
 function scanf(content, co) {
     return `
         <form co="${co}">
@@ -19,9 +21,29 @@ function scanf(content, co) {
     `;
 }
 
-let map = new Map();
-map.set('print', printf);
-map.set('input', scanf);
+// 非阻塞操作：终止
+function terminatef(content, co) {
+    // 终止操作在前端可以立即执行，不需要等待
+    console.log('Terminate operation received');
+    terminate();
+    return ''; // 终止操作不需要显示内容
+}
+
+// 操作映射表，同时标明阻塞类型
+const operations = {
+    'print': {
+        func: printf,
+        blocking: false
+    },
+    'input': {
+        func: scanf,
+        blocking: true
+    },
+    'terminate': {
+        func: terminatef,
+        blocking: false
+    }
+};
 
 function onInput(form) {
     let $form = $(form);
@@ -37,7 +59,6 @@ function onInput(form) {
         return false;
     }
 
-    // 禁用按钮防止重复提交
     $button.prop('disabled', true);
 
     $.ajax({
@@ -47,13 +68,14 @@ function onInput(form) {
         data: JSON.stringify({ content: input })
     })
         .done(function () {
-            // 显示用户输入的内容
+            // 将输入内容显示在控制台
             let $productDiv = $('#product');
             if ($productDiv.length) {
                 $productDiv.append(`<p co="${co}" style="color:#888;">${input}</p>`);
             }
             // 移除表单
             $form.remove();
+            // 重新开始轮询
             setTimeout(loop, TICK * 1000);
         })
         .fail(function (err) {
@@ -86,25 +108,24 @@ function loop() {
     })
         .done(function (data) {
             if (data.type === 'end') {
-                // 程序结束
                 return;
             }
 
-            if (data.type === 'print') {
-                let html = map.get('print')(data.content, co, data.newline);
+            let op = operations[data.type];
+            if (op) {
+                let html = op.func(data.content, co, data.newline);
                 let $productDiv = $('#product');
                 if ($productDiv.length) {
                     $productDiv.append(html);
                 }
-                co = data.co;
-                setTimeout(loop, TICK * 1000);
-            } else if (data.type === 'input') {
-                let html = map.get('input')(data.content, co);
-                let $productDiv = $('#product');
-                if ($productDiv.length) {
-                    $productDiv.append(html);
 
-                    // 添加表单提交事件
+                // 如果是阻塞操作，则等待用户输入，不再继续轮询
+                // 非阻塞操作则继续轮询
+                if (!op.blocking) {
+                    co = data.co;
+                    setTimeout(loop, TICK * 1000);
+                } else {
+                    // 对于阻塞操作，我们设置表单提交事件，并在提交后重新开始轮询
                     let $form = $(`form[co="${co}"]`);
                     if ($form.length) {
                         $form.on('submit', function (e) {
@@ -113,12 +134,14 @@ function loop() {
                             return false;
                         });
 
-                        // 聚焦输入框
                         $form.find('input[name="input"]').focus();
                     }
+                    co = data.co;
                 }
+            } else {
+                // 未知操作，继续轮询
                 co = data.co;
-                // 这里不调用 loop，等待用户输入
+                setTimeout(loop, TICK * 1000);
             }
         })
         .fail(function (err) {
@@ -127,14 +150,13 @@ function loop() {
         });
 }
 
-// 全局函数，供 HTML 调用
+// 初始化，在HTML加载完成后运行
 window.run = function () {
     loop();
 };
 
 window.terminate = terminate;
 
-// 页面加载完成后自动启动
 $(document).ready(function () {
     setTimeout(run, 100);
 });

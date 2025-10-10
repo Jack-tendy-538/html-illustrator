@@ -14,7 +14,8 @@ setup(
         ]
     },
     install_requires=[
-        'bottle>=0.12.0'
+        'bottle>=0.12.0',
+        'request>=2.32.0'
     ],
     author="Jack-tendy-538",
     author_email="jtnb508869677@outlook.com",

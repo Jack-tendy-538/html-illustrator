@@ -1,5 +1,5 @@
 #from sre_parse import SPECIAL_CHARS
-import json, re, webbrowser,time, pkg_resources
+import json, re, webbrowser, time, pkg_resources
 import threading, queue, uuid, os
 
 from wsgiref.simple_server import make_server, WSGIRequestHandler
@@ -88,12 +88,20 @@ class BottleDaemonner:
         """停止服务器"""
         if self.server:
             try:
-                # 发送关闭信号给服务器
-                import requests
+                # 发送关闭信号给服务器（尽量不强依赖第三方库）
                 try:
-                    requests.post(f'http://{self.host}:{self.port}/api?terminate=true', timeout=1)
-                except:
-                    pass  # 忽略连接错误，服务器可能已经关闭
+                    import requests
+                    try:
+                        requests.post(f'http://{self.host}:{self.port}/api?terminate=true', timeout=1)
+                    except:
+                        pass
+                except Exception:
+                    # 回退到 urllib（避免在没有 requests 时失败）
+                    try:
+                        from urllib import request as _urlreq
+                        _urlreq.urlopen(f'http://{self.host}:{self.port}/api?terminate=true', timeout=1)
+                    except:
+                        pass
                 
                 # 停止服务器
                 self.server.shutdown()
@@ -118,19 +126,27 @@ class HtmlIllustrator:
         self.enable('css', 'std-stdio.css')
         self.curr_co = 0
         self.bd = None
+        self.addon_url = {}  # 新增：用于存储附加URL处理函数
+        self.static_dir = self._get_static_dir()  # 初始化静态目录
+
         @self.app.route('/', method='GET')
         def index():
+            # 使用打包或工作目录中的 interface.html
+            interface_html = self._get_interface_html()
+            if not interface_html:
+                return HTTPError(404, "interface.html not found")
             regex = re.compile(r'<!--\s*css\s*-->', re.IGNORECASE)
-            with open('interface.html', 'r', encoding='utf-8') as f:
-                html = f.read()
-                return regex.sub(self.__gen_links(), html)
+            return regex.sub(self.__gen_links(), interface_html)
 
         @self.app.route('/static/<filepath>')
         def server_static(filepath):
             # 首先尝试包内的静态文件
-            package_static_path = pkg_resources.resource_filename(__name__, f'static/{filepath}')
-            if os.path.exists(package_static_path):
-                return static_file(filepath, root=os.path.dirname(package_static_path))
+            try:
+                package_static_path = pkg_resources.resource_filename(__name__, f'static/{filepath}')
+                if os.path.exists(package_static_path):
+                    return static_file(filepath, root=os.path.dirname(package_static_path))
+            except Exception:
+                pass
             
             # 然后尝试外部静态目录
             if self.static_dir and os.path.exists(os.path.join(self.static_dir, filepath)):
@@ -145,6 +161,19 @@ class HtmlIllustrator:
             action = request.query.get('action')
             method = request.method
             return self.deal_with_api(co,action,method)
+
+        # 新增：动态路由处理，用于扩展URL
+        @self.app.route('/<url:path>', method=['GET', 'POST'])
+        def handle_addon_urls(url):
+            return self.handle_custom_url(url)
+
+    def handle_custom_url(self, url):
+        """处理自定义URL路由"""
+        if url in self.addon_url:
+            handler = self.addon_url[url]
+            return handler(request)
+        else:
+            return HTTPError(404, f"URL not found: {url}")
 
     def deal_with_api(self, co, action, method):
         if request.query.get('terminal') == 'close':
@@ -180,19 +209,27 @@ class HtmlIllustrator:
             # 优雅关闭而不是强制退出
             threading.Thread(target=self._graceful_shutdown).start()
             return HTTPResponse(status=200, body="Shutting down...")
-        # 未知请求
+        # 新增：处理addon_url中的路由
+        if action in self.addon_url:
+            # 调用注册的处理函数，并传递request对象
+            return self.addon_url[action](request)
+
         return HTTPResponse(status=400, body="Invalid request")
 
     def enable(self, lib_type, url):
         if lib_type in self.enabled_lib:
             self.enabled_lib[lib_type].append(url)
 
-    def run(self, host='localhost', port=8080):
+    def run(self, host='localhost', port=8080, open_browser=True):
         """运行服务器"""
         self.arg_server = (host, port)
         self.bd = BottleDaemonner(self, host, port)
         self.bd.start()  # 启动服务器线程
-        webbrowser.open(f'http://{host}:{port}')
+        if open_browser:
+            try:
+                webbrowser.open(f'http://{host}:{port}')
+            except Exception:
+                pass
 
     def kill(self):
         """停止服务器"""
@@ -207,7 +244,7 @@ class HtmlIllustrator:
         if self.bd:
             self.bd.stop()
 
-    def _get_static_dir():
+    def _get_static_dir(self):
         """获取静态文件目录"""
         # 首先尝试包内的静态目录
         try:
@@ -255,7 +292,7 @@ class HtmlIllustrator:
     def print(self, content, newline='\n'):
         self.curr_co += 1
         # 转义特殊字符
-        content = ''.join(SPECIAL_CHARS.get(c, c) for c in content)
+        content = ''.join(SPECIAL_CHARS.get(c, c) for c in str(content))
         with self.lock:
             op = ConsoleOperation('print', 'server', {
                 'content': content,
@@ -267,7 +304,7 @@ class HtmlIllustrator:
     def input(self, prompt=''):
         self.curr_co += 1
         # 转义特殊字符
-        prompt = ''.join(SPECIAL_CHARS.get(c, c) for c in prompt)
+        prompt = ''.join(SPECIAL_CHARS.get(c, c) for c in str(prompt))
         # 轮询等待输入
         iw = inputWaiter()
         with self.lock:

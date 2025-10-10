@@ -1,2 +1,3 @@
 from _hi import HtmlIllustrator, ConsoleOperation
-__all__ = ['HtmlIllustrator','ConsoleOperation']
+from . import markdown
+__all__ = ['HtmlIllustrator','ConsoleOperation','markdown']
