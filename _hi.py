@@ -265,7 +265,7 @@ class HtmlIllustrator:
         """获取interface.html内容"""
         # 首先尝试包内的模板
         try:
-            interface_path = pkg_resources.resource_filename(__name__, 'templates/interface.html')
+            interface_path = pkg_resources.resource_filename(__name__, 'template/interface.html')
             if os.path.exists(interface_path):
                 with open(interface_path, 'r', encoding='utf-8') as f:
                     return f.read()

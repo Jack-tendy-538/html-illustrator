@@ -156,7 +156,3 @@ window.run = function () {
 };
 
 window.terminate = terminate;
-
-$(document).ready(function () {
-    setTimeout(run, 100);
-});
